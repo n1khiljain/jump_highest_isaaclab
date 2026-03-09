@@ -1,50 +1,112 @@
-# Jump Highest — Humanoid Jumping Environment
+# Jump Highest (Isaac Lab / RSL-RL)
 
-This repository contains an environment designed to train a humanoid robot to jump as high as possible. The environment and training scripts are tailored for reinforcement learning experiments where the objective is maximizing peak jump height.
+This repo is an **Isaac Lab extension** that adds a **Direct RL** humanoid task where the agent learns to jump upward (maximize height while staying upright).
 
-## Goal
-- Train a humanoid (simulated) agent to perform vertical jumps and maximize the apex height reached during each episode.
+## What you get
 
-## Environment Overview
-- Observation space: joint angles, joint velocities, body orientation (quaternion or Euler), center-of-mass height and velocity, foot contact flags, and optionally sensor readings (IMU). Observations are stacked across a short window for better temporal context.
-- Action space: continuous torques or target joint position velocities for the humanoid's actuators. Typical dimensionality matches the number of controllable joints.
-- Reward: primary reward is proportional to the maximum center-of-mass (COM) height achieved in the episode. Shaping terms may include energy penalties, standing stability bonus, or time-to-apex incentives to encourage explosive but safe jumps.
-- Episode termination: episode ends after a fixed time horizon (e.g., 2–4 seconds), on severe falls (torso hitting the ground), or when the agent has completed a jump and landed. Logged metric: peak COM height per episode.
+- **Gym task id**: `Template-Jump-Highest-Direct-v0`
+- **Env type**: `DirectRLEnv` with torque control
+- **Spaces**: action dim **21**, observation dim **54**
+- **Episode length**: **5.0s**
 
-## Files and Scripts
-- Training entrypoint: `scripts/rsl_rl/train.py` — run experiments and configure training hyperparameters through the CLI.
-- Evaluation / play: `scripts/rsl_rl/play.py` — load a trained model and run rollouts to visualize jumps.
-- Agents: simple baselines are available at `scripts/random_agent.py` and `scripts/zero_agent.py`.
-- Logs: training logs, TensorBoard events, and model checkpoints are saved under `logs/rsl_rl/cartpole_direct/` and `outputs/` subfolders (see the timestamped runs).
+## Prerequisites
 
-## Quickstart — Training
-1. Install dependencies (recommended to use a virtualenv).
+You need an **Isaac Lab** Python environment (which includes Isaac Sim + the `isaaclab*` packages). These scripts are meant to be run with the Isaac Lab launcher (on Windows that’s typically `isaaclab.bat`).
+
+If you run `scripts/rsl_rl/train.py` with the wrong Python, imports like `isaaclab.app` will fail.
+
+If you are using the Isaac Lab launcher, you can usually replace `python <script>` with:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
+.\isaaclab.bat -p <script> <args...>
 ```
 
-2. Run a training experiment (example):
+## Install (editable)
+
+From your Isaac Lab Python environment, install this extension in editable mode:
 
 ```powershell
-python scripts\rsl_rl\train.py --env jump_highest --algo ppo --total-timesteps 1000000 --log-dir logs/rsl_rl/jump_highest/exp1
+python -m pip install -e .\source\Jump_Highest
 ```
 
-Adjust `--env`, `--algo`, and hyperparameters as needed. See `scripts/rsl_rl/cli_args.py` for available CLI options.
+## Verify the task is registered
 
-## Recommended Reward & Hyperparameters
-- Reward: `r = alpha * peak_height - beta * energy_penalty - gamma * fall_penalty` (tune alpha/beta/gamma).
-- PPO starter hyperparameters: learning rate 3e-4, clip 0.2, n-steps 2048, batch size 64, epochs 10.
+This should print a table containing `Template-Jump-Highest-Direct-v0`:
 
-## Evaluation
-- Use `scripts/rsl_rl/play.py` to load a checkpoint in `logs/.../exported/` and render jump episodes. Record peak COM height and average over multiple seeds.
+```powershell
+python .\scripts\list_envs.py --keyword Jump
+```
 
-## Tips
-- Normalize observations (height, velocities) to stabilize training.
-- Reward peak height at episode end to avoid noisy per-step incentives.
-- Use curriculum learning: begin with smaller target heights or reduced gravity, then anneal to full difficulty.
+## Train (PPO via RSL-RL)
 
-## Contact
-If you want help tuning or adding visualizations, open an issue or contact the maintainer.
+Minimal training run:
+
+```powershell
+python .\scripts\rsl_rl\train.py --task Template-Jump-Highest-Direct-v0 --num_envs 1024 --headless
+```
+
+Useful flags:
+- `--experiment_name jump_highest`: controls the log folder name (defaults come from the agent config).
+- `--max_iterations 1000`: number of training iterations.
+- `--video`: record training videos to the run folder.
+
+Example with explicit log naming + videos:
+
+```powershell
+python .\scripts\rsl_rl\train.py `
+  --task Template-Jump-Highest-Direct-v0 `
+  --headless `
+  --num_envs 1024 `
+  --experiment_name jump_highest `
+  --run_name ppo_baseline `
+  --video --video_interval 2000 --video_length 200
+```
+
+## Play / evaluate a checkpoint
+
+Play the latest checkpoint from a previous run (uses `--load_run` + `--checkpoint`), or pass an explicit path via `--checkpoint`.
+
+```powershell
+python .\scripts\rsl_rl\play.py --task Template-Jump-Highest-Direct-v0 --num_envs 1 --real-time
+```
+
+To record a short rollout video:
+
+```powershell
+python .\scripts\rsl_rl\play.py --task Template-Jump-Highest-Direct-v0 --num_envs 1 --video --video_length 400
+```
+
+## Outputs & where to look
+
+Training creates a run directory under:
+
+`logs/rsl_rl/<experiment_name>/<timestamp>_<run_name>/`
+
+Inside each run folder you’ll typically find:
+- `params/env.yaml`, `params/agent.yaml`: the exact configs used
+- `videos/train/` and `videos/play/` (if enabled)
+- `exported/policy.pt` and `exported/policy.onnx` (exported on play)
+
+## Environment details (current implementation)
+
+The task is implemented in:
+- `source/Jump_Highest/Jump_Highest/tasks/direct/jump_highest/jump_highest_env.py`
+- `source/Jump_Highest/Jump_Highest/tasks/direct/jump_highest/jump_highest_env_cfg.py`
+
+Current reward terms (see `compute_rewards`):
+- **Upward velocity** reward (`root_lin_vel_w[:,2]`)
+- **Height above default** standing height (~1.34m)
+- **Alive** bonus (not terminated)
+- **Upright** bonus (penalizes tipping)
+- **Energy** penalty (squared actions)
+- **Termination** penalty (fall)
+
+Termination / done conditions:
+- **Fallen** when root height < `min_height` (default `0.5`)
+- **Timeout** at 5 seconds
+
+## Troubleshooting
+
+- **It logs to `cartpole_direct`**: that’s coming from the agent config (`rsl_rl_ppo_cfg.py`). Override with `--experiment_name jump_highest`.
+- **Out of memory / slow**: start with `--num_envs 256` or `1024` (the default environment config sets `4096` which can be heavy).
+- **RSL-RL version error**: `train.py` checks for `rsl-rl-lib==3.0.1` and prints the exact install command it expects.
