@@ -1,135 +1,50 @@
-# Template for Isaac Lab Projects
+# Jump Highest — Humanoid Jumping Environment
 
-## Overview
+This repository contains an environment designed to train a humanoid robot to jump as high as possible. The environment and training scripts are tailored for reinforcement learning experiments where the objective is maximizing peak jump height.
 
-This project/repository serves as a template for building projects or extensions based on Isaac Lab.
-It allows you to develop in an isolated environment, outside of the core Isaac Lab repository.
+## Goal
+- Train a humanoid (simulated) agent to perform vertical jumps and maximize the apex height reached during each episode.
 
-**Key Features:**
+## Environment Overview
+- Observation space: joint angles, joint velocities, body orientation (quaternion or Euler), center-of-mass height and velocity, foot contact flags, and optionally sensor readings (IMU). Observations are stacked across a short window for better temporal context.
+- Action space: continuous torques or target joint position velocities for the humanoid's actuators. Typical dimensionality matches the number of controllable joints.
+- Reward: primary reward is proportional to the maximum center-of-mass (COM) height achieved in the episode. Shaping terms may include energy penalties, standing stability bonus, or time-to-apex incentives to encourage explosive but safe jumps.
+- Episode termination: episode ends after a fixed time horizon (e.g., 2–4 seconds), on severe falls (torso hitting the ground), or when the agent has completed a jump and landed. Logged metric: peak COM height per episode.
 
-- `Isolation` Work outside the core Isaac Lab repository, ensuring that your development efforts remain self-contained.
-- `Flexibility` This template is set up to allow your code to be run as an extension in Omniverse.
+## Files and Scripts
+- Training entrypoint: `scripts/rsl_rl/train.py` — run experiments and configure training hyperparameters through the CLI.
+- Evaluation / play: `scripts/rsl_rl/play.py` — load a trained model and run rollouts to visualize jumps.
+- Agents: simple baselines are available at `scripts/random_agent.py` and `scripts/zero_agent.py`.
+- Logs: training logs, TensorBoard events, and model checkpoints are saved under `logs/rsl_rl/cartpole_direct/` and `outputs/` subfolders (see the timestamped runs).
 
-**Keywords:** extension, template, isaaclab
+## Quickstart — Training
+1. Install dependencies (recommended to use a virtualenv).
 
-## Installation
-
-- Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).
-  We recommend using the conda or uv installation as it simplifies calling Python scripts from the terminal.
-
-- Clone or copy this project/repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
-
-- Using a python interpreter that has Isaac Lab installed, install the library in editable mode using:
-
-    ```bash
-    # use 'PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-    python -m pip install -e source/Jump_Highest
-
-- Verify that the extension is correctly installed by:
-
-    - Listing the available tasks:
-
-        Note: It the task name changes, it may be necessary to update the search pattern `"Template-"`
-        (in the `scripts/list_envs.py` file) so that it can be listed.
-
-        ```bash
-        # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-        python scripts/list_envs.py
-        ```
-
-    - Running a task:
-
-        ```bash
-        # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-        python scripts/<RL_LIBRARY>/train.py --task=<TASK_NAME>
-        ```
-
-    - Running a task with dummy agents:
-
-        These include dummy agents that output zero or random agents. They are useful to ensure that the environments are configured correctly.
-
-        - Zero-action agent
-
-            ```bash
-            # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-            python scripts/zero_agent.py --task=<TASK_NAME>
-            ```
-        - Random-action agent
-
-            ```bash
-            # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-            python scripts/random_agent.py --task=<TASK_NAME>
-            ```
-
-### Set up IDE (Optional)
-
-To setup the IDE, please follow these instructions:
-
-- Run VSCode Tasks, by pressing `Ctrl+Shift+P`, selecting `Tasks: Run Task` and running the `setup_python_env` in the drop down menu.
-  When running this task, you will be prompted to add the absolute path to your Isaac Sim installation.
-
-If everything executes correctly, it should create a file .python.env in the `.vscode` directory.
-The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse.
-This helps in indexing all the python modules for intelligent suggestions while writing code.
-
-### Setup as Omniverse Extension (Optional)
-
-We provide an example UI extension that will load upon enabling your extension defined in `source/Jump_Highest/Jump_Highest/ui_extension_example.py`.
-
-To enable your extension, follow these steps:
-
-1. **Add the search path of this project/repository** to the extension manager:
-    - Navigate to the extension manager using `Window` -> `Extensions`.
-    - Click on the **Hamburger Icon**, then go to `Settings`.
-    - In the `Extension Search Paths`, enter the absolute path to the `source` directory of this project/repository.
-    - If not already present, in the `Extension Search Paths`, enter the path that leads to Isaac Lab's extension directory directory (`IsaacLab/source`)
-    - Click on the **Hamburger Icon**, then click `Refresh`.
-
-2. **Search and enable your extension**:
-    - Find your extension under the `Third Party` category.
-    - Toggle it to enable your extension.
-
-## Code formatting
-
-We have a pre-commit template to automatically format your code.
-To install pre-commit:
-
-```bash
-pip install pre-commit
+```powershell
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Then you can run pre-commit with:
+2. Run a training experiment (example):
 
-```bash
-pre-commit run --all-files
+```powershell
+python scripts\rsl_rl\train.py --env jump_highest --algo ppo --total-timesteps 1000000 --log-dir logs/rsl_rl/jump_highest/exp1
 ```
 
-## Troubleshooting
+Adjust `--env`, `--algo`, and hyperparameters as needed. See `scripts/rsl_rl/cli_args.py` for available CLI options.
 
-### Pylance Missing Indexing of Extensions
+## Recommended Reward & Hyperparameters
+- Reward: `r = alpha * peak_height - beta * energy_penalty - gamma * fall_penalty` (tune alpha/beta/gamma).
+- PPO starter hyperparameters: learning rate 3e-4, clip 0.2, n-steps 2048, batch size 64, epochs 10.
 
-In some VsCode versions, the indexing of part of the extensions is missing.
-In this case, add the path to your extension in `.vscode/settings.json` under the key `"python.analysis.extraPaths"`.
+## Evaluation
+- Use `scripts/rsl_rl/play.py` to load a checkpoint in `logs/.../exported/` and render jump episodes. Record peak COM height and average over multiple seeds.
 
-```json
-{
-    "python.analysis.extraPaths": [
-        "<path-to-ext-repo>/source/Jump_Highest"
-    ]
-}
-```
+## Tips
+- Normalize observations (height, velocities) to stabilize training.
+- Reward peak height at episode end to avoid noisy per-step incentives.
+- Use curriculum learning: begin with smaller target heights or reduced gravity, then anneal to full difficulty.
 
-### Pylance Crash
-
-If you encounter a crash in `pylance`, it is probable that too many files are indexed and you run out of memory.
-A possible solution is to exclude some of omniverse packages that are not used in your project.
-To do so, modify `.vscode/settings.json` and comment out packages under the key `"python.analysis.extraPaths"`
-Some examples of packages that can likely be excluded are:
-
-```json
-"<path-to-isaac-sim>/extscache/omni.anim.*"         // Animation packages
-"<path-to-isaac-sim>/extscache/omni.kit.*"          // Kit UI tools
-"<path-to-isaac-sim>/extscache/omni.graph.*"        // Graph UI tools
-"<path-to-isaac-sim>/extscache/omni.services.*"     // Services tools
-...
-```
+## Contact
+If you want help tuning or adding visualizations, open an issue or contact the maintainer.
