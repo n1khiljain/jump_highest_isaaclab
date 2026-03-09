@@ -22,7 +22,7 @@ class JumpHighestEnvCfg(DirectRLEnvCfg):
     action_space = 21
     observation_space = 54  # 1 + 4 + 3 + 3 + 21 + 21
     state_space = 0
-    action_scale = 100.0
+    action_scale = 75
 
     # simulation
     sim: SimulationCfg = SimulationCfg(dt=1 / 120, render_interval=decimation)
@@ -37,8 +37,10 @@ class JumpHighestEnvCfg(DirectRLEnvCfg):
     rew_scale_jump_vel = 0.5        # reward upward velocity
     rew_scale_height = 0.5          # reward height above ground
     rew_scale_alive = 5.0           # reward for not falling
-    rew_scale_upright = 2.0         # reward for staying upright
+    rew_scale_upright = 3.0         # reward for staying upright
     rew_scale_termination = -5.0    # penalty for falling
+    rew_scale_energy = -0.01  # penalize large joint torques
+
 
     # termination
     min_height = 0.5 # reset if root drops below this 

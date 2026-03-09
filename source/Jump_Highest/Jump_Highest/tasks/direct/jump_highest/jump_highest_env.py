@@ -68,10 +68,12 @@ class JumpHighestEnv(DirectRLEnv):
             self.cfg.rew_scale_alive,
             self.cfg.rew_scale_upright,
             self.cfg.rew_scale_termination,
-            self.robot.data.root_lin_vel_w,    # (num_envs, 3)
-            self.robot.data.root_pos_w,        # (num_envs, 3)
-            self.robot.data.root_quat_w,       # (num_envs, 4)
+            self.cfg.rew_scale_energy,
+            self.robot.data.root_lin_vel_w,
+            self.robot.data.root_pos_w,
+            self.robot.data.root_quat_w,
             self.reset_terminated,
+            self.actions,
         )
         return total_reward
 
@@ -110,10 +112,12 @@ def compute_rewards(
     rew_scale_alive: float,
     rew_scale_upright: float,
     rew_scale_terminated: float,
+    rew_scale_energy: float,
     root_lin_vel: torch.Tensor,
     root_pos: torch.Tensor,
     root_quat: torch.Tensor,
     reset_terminated: torch.Tensor,
+    actions: torch.Tensor,
 ):
     # reward upward (z) velocity
     jump_vel = torch.clamp(root_lin_vel[:, 2], min=0.0)
@@ -126,13 +130,15 @@ def compute_rewards(
     # alive bonus
     rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
 
-    # upright reward: how aligned the "up" axis is with world up
-    # for a quaternion (w, x, y, z), the up projection is roughly 1 - 2*(x^2 + y^2)
+    # upright reward
     upright = 1.0 - 2.0 * (root_quat[:, 1] ** 2 + root_quat[:, 2] ** 2)
     rew_upright = rew_scale_upright * torch.clamp(upright, min=0.0)
 
     # termination penalty
     rew_terminated = rew_scale_terminated * reset_terminated.float()
 
-    total_reward = rew_jump + rew_height + rew_alive + rew_upright + rew_terminated
+    # energy penalty - penalize large torques
+    rew_energy = rew_scale_energy * torch.sum(torch.square(actions), dim=-1)
+
+    total_reward = rew_jump + rew_height + rew_alive + rew_upright + rew_terminated + rew_energy
     return total_reward
